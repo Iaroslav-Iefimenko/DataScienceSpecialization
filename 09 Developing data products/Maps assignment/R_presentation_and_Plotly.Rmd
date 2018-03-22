@@ -1,0 +1,46 @@
+---
+title: "Developing data products Week 3 assignment"
+author: "Iaroslav Iefimenko"
+date: '21 january 2018'
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+```{r echo=FALSE, message=FALSE, results = 'hide'}
+#all the packages that we will use 
+library(dplyr)
+library(plotly)
+```
+## Introduction
+We need to create a web page presentation using R Markdown that features a plot created with Plotly. This webpage must contain the date that we created the document, and it must contain a plot created with Plotly.
+
+We use **mtcars** data set for plot building. The full name of this data set is **Motor Trend Car Road Tests** and it contains the data was extracted from the 1974 Motor Trend US magazine, and comprises fuel consumption and 10 aspects of automobile design and performance for 32 automobiles (1973–74 models).
+
+Source: *Henderson and Velleman (1981), Building multiple regression models interactively. Biometrics, 37, 391–411.*
+
+Let's build dependency **qsec** (1/4 mile time) from **hp** (Gross horsepower) and mark colors by **cyl** (Number of cylinders).
+
+## Dependency plot
+```{r echo=FALSE}
+pal <- c("red", "blue", "green")
+mtcars$name <- rownames(mtcars)
+pal <- setNames(pal, c("8", "6", "4"))
+p <- plot_ly(data = mtcars, x = ~hp, y = ~qsec, color = ~cyl, colors = pal, type = 'scatter', mode = "markers", text = ~paste(name))  %>%
+  layout(title = 'Acceleration from horse powers',
+         yaxis = list(title = 'Gross horsepower'),
+         xaxis = list(title = '1/4 mile time'))
+p
+```
+
+## Motor Trend Car Road Tests data example
+```{r echo=FALSE}
+mtcars <- subset(mtcars, select = -c(12))
+head(mtcars)
+```
+
+## Motor Trend Car Road Tests structure
+```{r echo=FALSE}
+str(mtcars)
+```

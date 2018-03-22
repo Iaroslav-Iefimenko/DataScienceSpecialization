@@ -1,0 +1,95 @@
+---
+title: "Developing Data products Final assignment"
+author: "Iaroslav Iefimenko"
+date: '27-01-2018'
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r echo=FALSE, message=FALSE, results = 'hide'}
+#all the packages that we will use 
+library(dplyr)
+library(plotly)
+
+tds <- read.csv("https://pkgstore.datahub.io/core/global-temp/monthly_csv/data/329e553af20ec84034a29372c0dce362/monthly_csv.csv", sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+tdsGCAG <- filter(tds, Source == "GCAG")
+
+month <- c('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+colors <- colors()
+```
+
+## Introduction
+I have developed an application that allows to view [Global Temperature Time Series](https://datahub.io/core/global-temp). Data are included from the global component of Climate at a Glance (GCAG). I use dataset which is provided annual mean temperature anomalies in degrees Celsius from 1880 to the present.
+
+Global temperature anomaly data come from the Global Historical Climatology Network-Monthly (GHCN-M) data set and International Comprehensive Ocean-Atmosphere Data Set (ICOADS), which have data from 1880 to the present. These two datasets are blended into a single product to produce the combined global land and ocean temperature anomalies.
+
+Average global mean temperature anomalies in degrees Celsius relative to a base period. GCAG base period: 20th century average.
+
+## Application description
+We load the dataset from web and initialize some constants during application start for reducing of reaction time. 
+
+The application includes the sidebar panel with range slider (we can select range of years) and select (we can select type of lines). The plot of temperature time series is recreated after each change. I made small range of years (2000-2016) for avoiding of lines overplotting.
+
+Example of source data:
+```{r echo = FALSE}
+head(tdsGCAG)
+```
+
+## Reactive calculation
+For each reactive calculation we:
+
+* select and sort means from source data for each year
+* add prepared data to data frame based on month names
+* build plot and add traces to plot for each year
+
+```{r echo = FALSE}
+    # set parameters for example (from input in application)
+    minYear <- 2012 
+    maxYear <- 2016
+    mode <- 'markers+lines'
+    yearString <- toString(minYear)
+```
+```{r echo = TRUE}
+    # intialize data frame
+    tdsY <- filter(tdsGCAG, substr(Date, 1, 4) == yearString)
+    tdsY <- tdsY[order(tdsY$Date),]
+    data <- data.frame(month, yearString = tdsY$Mean)
+    colnames(data)[colnames(data)=="yearString"] <- yearString
+    # add cols to data frame for other years
+    for(i in (minYear+1):maxYear) {
+      yearString <- toString(i)
+      tdsY <- filter(tdsGCAG, substr(Date, 1, 4) == yearString)
+      tdsY <- tdsY[order(tdsY$Date),]
+      data[yearString] <- tdsY$Mean
+    }
+```
+
+## Plot example
+
+```{r echo = FALSE}
+    # The default order will be alphabetized unless specified as below:
+    data$month <- factor(data$month, levels = data[["month"]]);
+  
+    # plot   
+    yearString <- toString(minYear)
+    plot <- plot_ly(data = data, x = ~month, y=data[[yearString]], name = yearString, 
+                    line = list(color = colors[sample(2:657, 1)]),
+                    type = 'scatter', mode = mode)  %>%
+      layout(title = 'Monthly mean temperature anomalies',
+             yaxis = list(title = 'Monthly anomalies'),
+             xaxis = list(title = 'Month'));
+  
+    # add traces
+    for(name in colnames(data)) {
+      if (name != yearString && name != 'month') {
+        inx <- sample(2:657, 1);
+        plot <- add_trace(plot, y = data[[name]], name = name, line = list(color = colors[inx]));
+      }
+    }
+  
+    plot
+```
+

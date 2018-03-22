@@ -1,0 +1,62 @@
+---
+title: "R Markdown and Leaflet"
+author: "Iaroslav Iefimenko"
+date: '14-01-2018'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r echo=FALSE, message=FALSE, results = 'hide'}
+#all the packages that we will use 
+library(dplyr)
+library(leaflet)
+```
+
+## Introduction
+
+This project was created as part of the Developing Data Products course of the Coursera Data Science Specialisation. The goal of the project is to create a web page using R Markdown wth a map created with Leaflet, and to host the resulting web page.
+
+## Airports
+
+[OurAirports](http://ourairports.com/about.html) is a free site where visitors can explore the world's airports, read other people's comments, and leave their own. For current example we use a CSV-formatted data dump of all our airports, countries, and regions, which is updated every night. 
+
+```{r echo=FALSE}
+airports <- read.csv2("http://ourairports.com/data/airports.csv",header=TRUE, sep=",", encoding = "UTF-8", stringsAsFactors = FALSE)
+```
+Structure of airports data:
+```{r echo=FALSE}
+str(airports)
+airports$latitude_deg <- as.numeric(airports$latitude_deg)
+airports$longitude_deg <- as.numeric(airports$longitude_deg)
+```
+
+## Airports map building
+Build custom icons:
+```{r}
+planeIcons <- icons(
+  iconUrl = ifelse(airports$type == "heliport", "https://iaroslav-iefimenko.github.io/RandLeaflet/icons/helicopter-airport.png",
+    ifelse(airports$type == "small_airport", "https://iaroslav-iefimenko.github.io/RandLeaflet/icons/small-airport.png", 
+    ifelse(airports$type == "closed", "https://iaroslav-iefimenko.github.io/RandLeaflet/icons/closed-airport.png",
+    ifelse(airports$type == "seaplane_base", "https://iaroslav-iefimenko.github.io/RandLeaflet/icons/sea-plane-airport.png",
+    ifelse(airports$type == "balloonport", "https://iaroslav-iefimenko.github.io/RandLeaflet/icons/ballon-airport.png",
+    ifelse(airports$type == "medium_airport", "https://iaroslav-iefimenko.github.io/RandLeaflet/icons/medium-airport.png",
+    ifelse(airports$type == "large_airport", "https://iaroslav-iefimenko.github.io/RandLeaflet/icons/large-airport.png",
+    "https://iaroslav-iefimenko.github.io/RandLeaflet/icons/unknown-airport.png"))))))),
+  iconWidth = 16, iconHeight = 16,
+  iconAnchorX = 16, iconAnchorY = 16
+)
+```
+
+Build and show map:
+```{r}
+map <- leaflet(data = airports) %>% addTiles() %>%
+  addMarkers(lng = ~longitude_deg, lat = ~latitude_deg, label = ~name,
+    clusterOptions = markerClusterOptions(), icon = planeIcons,
+    popup = ~paste(sep = "<br/>",
+    "<b>Airport name:</b>", name, "<b>Airport type:</b>", type, "<b>ISO Country:</b>", iso_country,
+    "<b>Ident:</b>", ident, "<b>Home link:</b>", home_link, "<b>Wikipedia link:</b>", wikipedia_link
+))
+map
+```
