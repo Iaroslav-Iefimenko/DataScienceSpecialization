@@ -1,0 +1,117 @@
+---
+title: "Practical machine learning Course project"
+author: "Iaroslav Iefimenko"
+date: '5 января 2018 г '
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r echo=FALSE, message=FALSE, results = 'hide'}
+#all the packages that we will use 
+library(caret)
+library(randomForest)
+library(gbm)
+library(e1071)
+```
+##Executive summary
+###Introduction
+Human Activity Recognition - HAR - has emerged as a key research area in the last years and is gaining increasing attention by the pervasive computing research community. Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement � a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and predict the manner in which they did the exercise.
+
+###Data description
+```{r results = 'hide'}
+#Download the data
+if(!file.exists("pml-training.csv")){download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv")}
+
+if(!file.exists("pml-testing.csv")){download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv")}
+
+
+#Read the training data and replace empty values by NA
+trainingDS<- read.csv("pml-training.csv", sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+testingDS<- read.csv("pml-testing.csv", sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+```
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har . This dataset is licensed under the Creative Commons license (CC BY-SA). Our data consists of 19622 values of 160 variables in training data set and 20 values of 160 variables in testing data set.
+
+##Data cleaning
+As first step let's remove all columns with NA values only:
+```{r results = 'hide'}
+trainingDS <- trainingDS[,(colSums(is.na(trainingDS)) == FALSE)]
+testingDS <- testingDS[,(colSums(is.na(testingDS)) == FALSE)]
+```
+So, we remove 100 variables from 160. Also, we can see that the first 7 variables (X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window) are  administrative parameters and are unlikely to help us predict the subjects are performing. As second step, we can remove it.
+```{r results = 'hide'}
+trainingDS <- trainingDS[, -(0:7)]
+testingDS <- testingDS[, -(0:7)]
+```
+As final step, let's check ner zero variables:
+```{r results = 'hide'}
+nzv <- nearZeroVar(trainingDS,saveMetrics=TRUE)
+trainingDS <- trainingDS[,nzv$nzv==FALSE]
+
+nzv <- nearZeroVar(testingDS,saveMetrics=TRUE)
+testingDS <- testingDS[,nzv$nzv==FALSE]
+```
+As result of data cleaning, our data consists of 19622 values of 53 variables in training data set and 20 values of 53 variables in testing data set.
+
+##Data pre-processing
+First of all, convert all features to numeric class.
+```{r results = 'hide'}
+for(i in 1:(length(trainingDS) - 1)) {
+    trainingDS[,i] <- as.numeric(trainingDS[,i])
+    testingDS[,i] <- as.numeric(testingDS[,i])
+}
+```
+Further, split training data set to training and validation parts for cross validation.
+```{r results = 'hide'}
+inTrain <- createDataPartition(y=trainingDS$classe,p=0.8, list=FALSE)
+trainingData <- trainingDS[inTrain,]
+validationData <- trainingDS[-inTrain,]
+```
+
+##Models training
+Firstly, we will use Random Forest to build the first model.
+```{r results = 'hide'}
+# run the random forest algorithm on the training data set
+rfFit <- randomForest(classe~., data = trainingData, method ="rf", prox = TRUE)
+# use model to predict on validation data set
+rfPred <- predict(rfFit, validationData)
+```
+```{r}
+# calculate accuracy
+confusionMatrix(rfPred, validationData$classe)
+```
+Secondly, we will use Generalized Boosted Regression Model to build the second model.
+```{r results = 'hide'}
+# run the generalized boosted regression model
+gbmFit <- train(classe~., data = trainingData, method ="gbm", verbose = FALSE)
+# use model to predict on validation data set
+gbmPred <- predict(gbmFit, validationData)
+```
+```{r}
+# calculate accuracy
+confusionMatrix(gbmPred, validationData$classe)
+```
+As we see, accuracy of Random forest model is 0.995 and accuracy for General boosted model is 0.967. So, the random forest model is better than General boosted model for this case.
+
+The five most important variables in the model and their relative importance values are:
+```{r}
+vi <- varImp(rfFit)
+vi[head(order(unlist(vi), decreasing = TRUE), 5L), , drop = FALSE]
+```
+
+##Model apply
+Next, apply Random forest model to test data set.
+```{r results = 'hide'}
+# use model to predict on test data set
+rfTestPred <- predict(rfFit, testingDS)
+```
+```{r}
+# view predicted data
+print(rfTestPred)
+```
+
+##Literature
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
