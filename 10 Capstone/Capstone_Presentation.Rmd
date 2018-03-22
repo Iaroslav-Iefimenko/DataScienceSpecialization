@@ -1,0 +1,52 @@
+---
+title: "Data science Capstone project presentation"
+author: "Iaroslav Iefimenko"
+date: '24-02-2018'
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This project is the final part of <a href="https://www.coursera.org/learn/data-science-project/home/info">Data Science Capstone Course</a>.<br/><br/>
+During this course we've analyzed a large corpus of text documents to discover the structure in the data and how words are put together.  Finally, you've used the knowledge you gained in data products to build a predictive text algorhytm and to develop a text prediction application on Shiny platform. <br/><br/>
+You can get more details in <a href="https://github.com/Iaroslav-Iefimenko/data-science-capstone">Repository</a> and try use the <a href="https://iaroslav.shinyapps.io/TextPrediction/">Application</a>.
+
+## Text corpus analysis
+
+I've selected the English language as a base for following investigatons. I've used the <a href="https://cran.r-project.org/web/packages/RWeka/index.html">RWeka library</a> for text processing as first step. But RWeka processing works very slowly and can't work with big amount of text data (at least on my PC), so I've switched to <a href="https://quanteda.io/">Quanteda library</a>. Sample corpus was cleaned, lower-cased, links, twitter handles, punctuations, numbers and extra whitespaces were removed, etc...
+<h3>Example of text processing code:</h3>
+```{r eval=FALSE}
+# Sample the data
+smpl <- c(sample(linesBlogs, length(linesBlogs) * 0.0015))
+corp <- VCorpus(VectorSource(smpl))
+# clear data
+corp <- tm_map(corp, removePunctuation)
+# ...
+# prepare frequency calculation
+bigram <- function(x) NGramTokenizer(x,Weka_control(min = 2,max = 2))
+```
+
+## N-grams corpus
+
+I've used a random sample of 0.5% from the raw data to build the final model for increasing speed of application but I've used N-grams from unigrams to hexagrams for increasing quality of prediction.<br/><br/>
+We use the scan of n-grams corpus from hexagrams to unigrams by frequency for search of most frequent next words and building predicted words list.
+<h3>Example of hexagrams</h3>
+```{r echo=FALSE, message=FALSE, results = 'hide'}
+load(url('https://github.com/Iaroslav-Iefimenko/data-science-capstone/raw/master/freq.w6.RData'))
+```
+```{r echo=FALSE}
+head(f6w)
+```
+
+## Prediction applcation
+
+<a href="https://iaroslav.shinyapps.io/TextPrediction/">Prediction application</a> has a classic design of Shiny applications.<br/><br/>
+<ul>
+<li>Left panel contains the text input field (this text is used as input data for prediction algorhytm) and number slyder (for number of predicted words)</li>.
+<li>Main panel contains the tab 'Predicted n-grams in detail' for prediction results view and 'Useful information' with short application description and useful links. Detail information contains full N-gram, frequency of N-gram in sample corpus and predicted next word. This format is used for educational purposes, real application will use 'Next word' column only.</li>
+</ul><br/>
+First run of prediction is more slow than others, because server execute the loading of n-grams corpus.  After that reaction of applcation is less than 1 second.

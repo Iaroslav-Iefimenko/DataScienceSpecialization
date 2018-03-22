@@ -1,0 +1,274 @@
+---
+title: "Milestone Report 2 week"
+author: "Iaroslav Iefimenko"
+date: '7 Feb 2018'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r echo=FALSE, message=FALSE, results = 'hide'}
+#all the packages that we will use 
+library(stringi)
+library(tm) # for text mining
+library(dplyr)
+library(plotly)
+library(knitr)
+library(RWeka)
+library(SnowballC)
+library(plotly)
+```
+## Introduction
+
+This milestone report for the Data Science Capstone project provides a summary of data preprocessing and exploratory data analysis of the data sets. 
+
+The first step in building a predictive model for text is understanding the distribution and relationship between the words, tokens, and phrases in the text.
+
+The second step is building basic n-gram model - using the exploratory analysis, we will build a basic n-gram model for predicting the next word based on the previous 1, 2, or 3 words. Also we will build n-grams of 4,5 and 6 words, for handling unseen n-grams - in some cases people will want to type an unusual combination of words.
+
+## Data source
+
+In this project, the following data is provided by following URL: http://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+We need to download the dataset files and extract into our working directory. Text documents are provided in English, German, Finnish and Russian and they come in three different forms: blogs, news and twitter. For this project we are interested in the three sets of data in US English.
+
+Load data:
+```{r echo=FALSE}
+#set path varables
+rootDir <- "D:/Solutions/Data Science/Capstone"
+blogsPath <- file.path(rootDir, "final/en_US/en_US.blogs.txt")
+newsPath <- file.path(rootDir, "final/en_US/en_US.news.txt")
+profanitiesPath <- file.path(rootDir, "swearWords.txt")
+```
+```{r}
+# twitter data set example loading
+twitterPath <- file.path(rootDir, "final/en_US/en_US.twitter.txt")
+con <- file(twitterPath, "r") 
+linesTwitter <- readLines(con, skipNul = TRUE)
+close(con)
+```
+```{r echo=FALSE, message=FALSE, results = 'hide', warning=FALSE}
+# news data set
+con <- file(newsPath, "r") 
+linesNews <- readLines(con, skipNul = TRUE)
+close(con)
+
+# blogs data set
+con <- file(blogsPath, "r") 
+linesBlogs <- readLines(con, skipNul = TRUE)
+close(con)
+
+# profanities
+con <- file(profanitiesPath, "r") 
+profanities <- readLines(con, skipNul = TRUE)
+close(con)
+```
+
+## Exploratory analysis
+
+Firstly , let's get the simple statistics for loaded datasets:
+```{r}
+#twitter statistics getting example
+sizeTwitter <- file.size(twitterPath)/1024^2
+lengthTwitter <- length(linesTwitter)
+twitterMaxLine <- max(nchar(linesTwitter))
+twitterWordsCount <- stri_count_words(linesTwitter)
+twitterWordsTotalCount <- sum(twitterWordsCount)
+twitterWordsMean <- mean(twitterWordsCount)
+```
+```{r echo=FALSE}
+#news statistics
+sizeNews <- file.size(newsPath)/1024^2
+lengthNews <- length(linesNews)
+newsMaxLine <- max(nchar(linesNews))
+newsWordsCount <- stri_count_words(linesNews)
+newsWordsTotalCount <- sum(newsWordsCount)
+newsWordsMean <- mean(newsWordsCount)
+
+#blogs statistics
+sizeBlogs <- file.size(blogsPath)/1024^2
+lengthBlogs <- length(linesBlogs)
+blogsMaxLine <- max(nchar(linesBlogs))
+blogsWordsCount <- stri_count_words(linesBlogs)
+blogsWordsTotalCount <- sum(blogsWordsCount)
+blogsWordsMean <- mean(blogsWordsCount)
+
+#statistics summary
+summary_table <- data.frame(filename = c("blogs","news","twitter"),
+                            file_size_MB = c(sizeBlogs, sizeNews, sizeTwitter),
+                            num_lines = c(lengthBlogs, lengthNews, lengthTwitter),
+                            max_line_length = c(blogsMaxLine, newsMaxLine, twitterMaxLine),
+                            total_num_words = c(blogsWordsTotalCount,newsWordsTotalCount, twitterWordsTotalCount),
+                            mean_num_words_in_line = c(blogsWordsMean, newsWordsMean, twitterWordsMean))
+```
+Datasets statistics summary:
+```{r echo=FALSE, results="asis"}
+kable(summary_table)
+```
+
+## Data preprocessing
+
+We will take and combine the three data samples one dataset to work on because the full data set too big to do analysis on (memory allocation, processing, etc.)
+
+```{r}
+# Sample the data
+set.seed(4321)
+smpl <- c(sample(linesBlogs, lengthBlogs * 0.002),
+          sample(linesNews, lengthNews * 0.002),
+          sample(linesTwitter, lengthTwitter * 0.002))
+```
+The sample dataset has `r length(smpl)` lines and `r sum(stri_count_words(smpl))` words.
+
+Let's construct the corpus and clean up it by removing special characters, punctuation, numbers, etc. We also remove profanity that we do not want to predict.
+```{r}
+# Load the data as a corpus
+smpl <- sapply(smpl,function(row) iconv(row, "latin1", "ASCII", sub=""))
+corp <- VCorpus(VectorSource(smpl))
+
+# clear data
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+
+corp <- tm_map(corp, toSpace, "(f|ht)tp(s?)://(.*)[.][a-z]+") # remove URLs
+corp <- tm_map(corp, toSpace, "@[^\\s]+") # remove twitter handles
+corp <- tm_map(corp, toSpace, "/")
+corp <- tm_map(corp, toSpace, "@")
+corp <- tm_map(corp, toSpace, "\\|")
+corp <- tm_map(corp, tolower)
+corp <- tm_map(corp, PlainTextDocument)
+corp <- tm_map(corp, removePunctuation)
+corp <- tm_map(corp, removeNumbers)
+corp <- tm_map(corp, stripWhitespace)
+corp <- tm_map(corp, removeWords, profanities)
+corp <- tm_map(corp, removeWords, stopwords("english"))
+corp <- tm_map(corp, stemDocument)
+```
+
+We will require the following helper functions for words frequency calculation:
+```{r}
+# prepare frequency calculation
+getFrequency <- function(dm) {
+  m <- as.matrix(dm)
+  v <- sort(rowSums(m),decreasing=TRUE)
+  d <- data.frame(word = names(v),freq=v)
+  return (d)
+}
+
+bigram <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+trigram <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+quadgram <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+pentagram <- function(x) NGramTokenizer(x, Weka_control(min = 5, max = 5))
+hexagram <- function(x) NGramTokenizer(x, Weka_control(min = 6, max = 6))
+```
+
+Let's calculate the frequency for single words and n-grams:
+```{r}
+f1w <- getFrequency(removeSparseTerms(TermDocumentMatrix(corp), 0.99))
+f2w <- getFrequency(TermDocumentMatrix(corp, control = list(tokenize = bigram)))
+f3w <- getFrequency(TermDocumentMatrix(corp, control = list(tokenize = trigram)))
+f4w <- getFrequency(TermDocumentMatrix(corp, control = list(tokenize = quadgram)))
+f5w <- getFrequency(TermDocumentMatrix(corp, control = list(tokenize = pentagram)))
+f6w <- getFrequency(TermDocumentMatrix(corp, control = list(tokenize = hexagram)))
+```
+
+## Frequency calculaton results {.tabset .tabset-fade .tabset-pills}
+
+### Single words
+
+```{r echo=FALSE}
+kable(head(f1w[2], 10))
+```
+
+### Bigrams
+
+```{r echo=FALSE}
+kable(head(f2w[2], 10))
+```
+
+### Trigrams
+
+```{r echo=FALSE}
+kable(head(f3w[2], 10))
+```
+
+### Quadgrams
+
+```{r echo=FALSE}
+kable(head(f4w[2], 10))
+```
+
+### Pentagrams
+
+```{r echo=FALSE}
+kable(head(f5w[2], 10))
+```
+
+### Hexagrams
+
+```{r echo=FALSE}
+kable(head(f6w[2], 10))
+```
+
+## N-grams frequency plots {.tabset .tabset-fade .tabset-pills}
+
+Using plotly to create chart of first n-grams:
+```{r echo=FALSE}
+getPlot <- function (fw, n, ytitle) {
+  fw_head <- head(fw, 20)
+  word <- as.character(fw_head$word)
+  p <- plot_ly(type = 'bar', orientation = 'h') %>%
+    layout(xaxis = list(title = 'Frequency', showline = TRUE, autotick = TRUE, ticks = "outside"),
+           yaxis = list(title = '', showline = TRUE, autotick = TRUE, ticks = "outside", autorange = "reversed"),
+           margin = list(l = 60*n, r = 20, t = 30, b = 50),
+           showlegend = FALSE)
+
+  for (i in 1:length(word)){
+    p <- add_trace(p, name = word[i], x = fw_head$freq[i], y = word[i])
+  }
+  return (p)
+}
+```
+
+### Single words
+
+```{r echo=FALSE, warning=FALSE}
+p1 <- getPlot(f1w, 1)
+p1
+```
+
+### Bigrams
+
+```{r echo=FALSE, warning=FALSE}
+p2 <- getPlot(f2w, 2)
+p2
+```
+
+### Trigrams
+
+```{r echo=FALSE, warning=FALSE}
+p3 <- getPlot(f3w, 3)
+p3
+```
+
+### Quadgrams
+
+```{r echo=FALSE, warning=FALSE}
+p4 <- getPlot(f4w, 4)
+p4
+```
+
+### Pentagrams
+
+```{r echo=FALSE, warning=FALSE}
+p5 <- getPlot(f5w, 5)
+p5
+```
+
+### Hexagrams
+
+```{r echo=FALSE, warning=FALSE}
+p6 <- getPlot(f6w, 6)
+p6
+```
